@@ -61,6 +61,14 @@
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
         .actions-group { display: flex; gap: 6px; flex-wrap: wrap; }
         .empty-state { text-align: center; padding: 40px !important; color: #9ca3af; font-size: 14px; }
+        .tab-bar { display: flex; gap: 0; margin-bottom: 16px; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden; }
+        .tab-btn { padding: 10px 24px; border: none; background: transparent; font-size: 14px; font-weight: 500; color: #6b7280; cursor: pointer; transition: all 0.2s; border-bottom: 2px solid transparent; }
+        .tab-btn:hover { color: #374151; background: #f9fafb; }
+        .tab-btn.active { color: #3b82f6; border-bottom-color: #3b82f6; background: #f0f7ff; }
+        .mw-table { display: none; }
+        .mw-table.visible { display: table; }
+        .svc-table { display: none; }
+        .svc-table.visible { display: table; }
     </style>
 </head>
 <body>
@@ -75,7 +83,7 @@
         </header>
 
         <div class="toolbar">
-            <input type="text" id="search-input" placeholder="搜索服务名..." autocomplete="off" />
+            <input type="text" id="search-input" placeholder="搜索..." autocomplete="off" />
             <select id="mode-select" class="mode-select">
                 <option value="user" selected>用户服务</option>
                 <option value="all">全部服务</option>
@@ -84,14 +92,20 @@
             <span id="loading-indicator" class="loading hidden">加载中...</span>
         </div>
 
+        <div class="tab-bar">
+            <button id="tab-services" class="tab-btn active" onclick="switchTab('services')">&#x2699; 系统服务</button>
+            <button id="tab-middleware" class="tab-btn" onclick="switchTab('middleware')">&#x1F4E6; 中间件</button>
+        </div>
+
         <div id="toast" class="toast hidden"></div>
 
         <div id="platform-warning" class="warning hidden">
             &#x26A0; 当前运行在非 Linux 系统上，服务管理功能不可用。部署到 Linux 服务器后即可使用。
         </div>
 
-        <div class="table-container">
-            <table id="service-table">
+        <!-- 系统服务表格 -->
+        <div class="table-container" id="svc-table-container">
+            <table id="service-table" class="svc-table visible">
                 <thead>
                     <tr>
                         <th class="col-status">状态</th>
@@ -108,16 +122,40 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- 中间件表格 -->
+        <div class="table-container hidden" id="mw-table-container">
+            <table id="middleware-table" class="mw-table visible">
+                <thead>
+                    <tr>
+                        <th class="col-status">状态</th>
+                        <th class="col-name">名称</th>
+                        <th class="col-cat">分类</th>
+                        <th class="col-ver">版本</th>
+                        <th class="col-port">端口</th>
+                        <th class="col-pid">PID</th>
+                        <th class="col-mgmt">管理方式</th>
+                        <th class="col-actions">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="mw-tbody">
+                    <tr><td colspan="8" class="empty-state">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <script>
     // ---- 状态 ----
     var allServices = [];
+    var allMiddleware = [];
     var currentSearch = '';
     var currentMode = 'user';  // user | all
+    var currentTab = 'services';  // services | middleware
 
     // ---- DOM 元素 ----
     var $tbody = document.getElementById('service-tbody');
+    var $mwTbody = document.getElementById('mw-tbody');
     var $searchInput = document.getElementById('search-input');
     var $modeSelect = document.getElementById('mode-select');
     var $refreshBtn = document.getElementById('refresh-btn');
@@ -127,17 +165,25 @@
     var $serviceCount = document.getElementById('service-count');
     var $platformWarning = document.getElementById('platform-warning');
     var $toast = document.getElementById('toast');
+    var $svcTableContainer = document.getElementById('svc-table-container');
+    var $mwTableContainer = document.getElementById('mw-table-container');
+    var $tabServices = document.getElementById('tab-services');
+    var $tabMiddleware = document.getElementById('tab-middleware');
 
     // ---- 初始化 ----
     document.addEventListener('DOMContentLoaded', function() {
         loadSystemInfo();
         loadServices();
+        loadMiddleware();
 
-        $refreshBtn.addEventListener('click', loadServices);
+        $refreshBtn.addEventListener('click', function() {
+            if (currentTab === 'services') loadServices();
+            else loadMiddleware();
+        });
 
         $modeSelect.addEventListener('change', function() {
             currentMode = $modeSelect.value;
-            loadServices();
+            if (currentTab === 'services') loadServices();
         });
 
         var debounceTimer;
@@ -150,6 +196,28 @@
         });
     });
 
+    // ---- Tab 切换 ----
+    function switchTab(tab) {
+        currentTab = tab;
+        if (tab === 'services') {
+            $svcTableContainer.classList.remove('hidden');
+            $mwTableContainer.classList.add('hidden');
+            $tabServices.classList.add('active');
+            $tabMiddleware.classList.remove('active');
+            $searchInput.placeholder = '搜索服务名...';
+            $modeSelect.style.display = '';
+            loadServices();
+        } else {
+            $svcTableContainer.classList.add('hidden');
+            $mwTableContainer.classList.remove('hidden');
+            $tabServices.classList.remove('active');
+            $tabMiddleware.classList.add('active');
+            $searchInput.placeholder = '搜索中间件...';
+            $modeSelect.style.display = 'none';
+            loadMiddleware();
+        }
+    }
+
     // ---- API ----
     function loadSystemInfo() {
         fetch('/api/system')
@@ -161,6 +229,11 @@
                 if (!info.is_linux) {
                     $platformWarning.classList.remove('hidden');
                 }
+                // 显示服务数 + 中间件数
+                var parts = [];
+                if (info.service_count) parts.push(info.service_count + ' 个服务');
+                if (info.middleware_count) parts.push(info.middleware_count + ' 个中间件');
+                $serviceCount.textContent = parts.join(' / ');
             })
             .catch(function(err) {
                 console.error('加载系统信息失败:', err);
@@ -178,13 +251,33 @@
                 if (!data.platform) {
                     $platformWarning.classList.remove('hidden');
                 }
-                $serviceCount.textContent = data.total + ' 个服务';
                 render();
             })
             .catch(function(err) {
                 console.error('加载服务列表失败:', err);
                 showToast('加载服务列表失败: ' + err.message, 'error');
                 $tbody.innerHTML = '<tr><td colspan="7" class="empty-state">加载失败，请检查后端是否运行</td></tr>';
+            })
+            .finally(function() {
+                $loading.classList.add('hidden');
+                $refreshBtn.disabled = false;
+            });
+    }
+
+    function loadMiddleware() {
+        $loading.classList.remove('hidden');
+        $refreshBtn.disabled = true;
+
+        fetch('/api/middleware')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                allMiddleware = data.middleware || [];
+                render();
+            })
+            .catch(function(err) {
+                console.error('加载中间件列表失败:', err);
+                showToast('加载中间件列表失败: ' + err.message, 'error');
+                $mwTbody.innerHTML = '<tr><td colspan="8" class="empty-state">加载失败，请检查后端是否运行</td></tr>';
             })
             .finally(function() {
                 $loading.classList.add('hidden');
@@ -208,8 +301,35 @@
             });
     }
 
+    function doMwAction(key, action) {
+        var displayNames = {
+            start: '启动', stop: '停止', restart: '重启'
+        };
+        fetch('/api/middleware/' + encodeURIComponent(key) + '/' + action, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(result) {
+                if (result.success) {
+                    showToast(key + ': ' + result.message, 'success');
+                    setTimeout(loadMiddleware, 1000);
+                } else {
+                    showToast(key + ': ' + result.message, 'error');
+                }
+            })
+            .catch(function(err) {
+                showToast((displayNames[action] || action) + ' ' + key + ' 失败: ' + err.message, 'error');
+            });
+    }
+
     // ---- 渲染 ----
     function render() {
+        if (currentTab === 'services') {
+            renderServices();
+        } else {
+            renderMiddleware();
+        }
+    }
+
+    function renderServices() {
         var search = currentSearch.toLowerCase();
         var filtered = search
             ? allServices.filter(function(s) { return s.name.toLowerCase().indexOf(search) !== -1; })
@@ -256,6 +376,56 @@
                 (svc.is_enabled
                     ? '<button class="btn btn-sm btn-outline" onclick="doAction(\'' + name + '\',\'disable\')">&#x1F513; 禁自启</button>'
                     : '<button class="btn btn-sm btn-outline" onclick="doAction(\'' + name + '\',\'enable\')">&#x1F512; 开自启</button>');
+        }
+    }
+
+    // ---- 中间件渲染 ----
+    function renderMiddleware() {
+        var search = currentSearch.toLowerCase();
+        var filtered = search
+            ? allMiddleware.filter(function(m) { return m.key.toLowerCase().indexOf(search) !== -1 || m.display_name.toLowerCase().indexOf(search) !== -1; })
+            : allMiddleware;
+
+        if (filtered.length === 0) {
+            $mwTbody.innerHTML = '<tr><td colspan="8" class="empty-state">' +
+                (search ? '没有匹配的中间件' : '未发现任何中间件') + '</td></tr>';
+            return;
+        }
+        $mwTbody.innerHTML = filtered.map(renderMwRow).join('');
+    }
+
+    function renderMwRow(mw) {
+        var statusBadgeHtml = mw.status === 'running'
+            ? '<span class="badge badge-green">&#x25CF; 运行中</span>'
+            : '<span class="badge">&#x25CB; 已停止</span>';
+        var ver = mw.version || '--';
+        var port = mw.port ? mw.port : (mw.ports && mw.ports.length > 0 ? mw.ports.join(',') : '--');
+        var pid = mw.pid ? mw.pid : (mw.pids && mw.pids.length > 0 ? mw.pids[0] : '--');
+        var mgmtLabels = { systemd: 'systemd', script: '脚本', process: '进程', unmanaged: '不支持' };
+        var mgmt = mgmtLabels[mw.management] || mw.management;
+
+        return '<tr>' +
+            '<td>' + statusBadgeHtml + '</td>' +
+            '<td><span class="service-name">' + esc(mw.display_name) + '</span></td>' +
+            '<td><span class="badge">' + esc(mw.category || '--') + '</span></td>' +
+            '<td><code>' + esc(ver) + '</code></td>' +
+            '<td><code>' + port + '</code></td>' +
+            '<td><code>' + pid + '</code></td>' +
+            '<td><span class="badge badge-blue">' + mgmt + '</span></td>' +
+            '<td><div class="actions-group">' + mwActionButtons(mw) + '</div></td>' +
+            '</tr>';
+    }
+
+    function mwActionButtons(mw) {
+        var key = escAttr(mw.key);
+        if (mw.management === 'unmanaged') {
+            return '<button class="btn btn-sm btn-outline" disabled title="不支持管理">--</button>';
+        }
+        if (mw.status === 'running') {
+            return '<button class="btn btn-sm btn-danger" onclick="doMwAction(\'' + key + '\',\'stop\')">&#x23F9; 停止</button>' +
+                '<button class="btn btn-sm btn-warning" onclick="doMwAction(\'' + key + '\',\'restart\')">&#x21BB; 重启</button>';
+        } else {
+            return '<button class="btn btn-sm btn-success" onclick="doMwAction(\'' + key + '\',\'start\')">&#x25B6; 启动</button>';
         }
     }
 

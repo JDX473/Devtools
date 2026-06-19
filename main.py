@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse
 from pathlib import Path
 
 import service_manager as sm
+import middleware as mw
 
 app = FastAPI(
     title="DevTools",
@@ -41,7 +42,15 @@ async def dashboard():
 @app.get("/api/system")
 async def system_info():
     """获取系统信息"""
-    return sm.get_system_info()
+    info = sm.get_system_info()
+    try:
+        mw_summary = mw.get_middleware_summary()
+        info["middleware_count"] = mw_summary["total"]
+        info["middleware_running"] = mw_summary["running"]
+    except Exception:
+        info["middleware_count"] = 0
+        info["middleware_running"] = 0
+    return info
 
 
 # ---- API: 服务列表 ----
@@ -119,6 +128,60 @@ async def disable_service(name: str):
     if info is None:
         raise HTTPException(status_code=404, detail=f"服务 {name} 未找到")
     result = sm.disable_service(name)
+    return result.to_dict()
+
+
+# ---- API: 中间件列表 ----
+
+@app.get("/api/middleware")
+async def list_middleware(
+    search: str = Query(default="", description="按名称搜索"),
+    category: str = Query(default="", description="按分类过滤"),
+):
+    """列出所有检测到的中间件"""
+    result = mw.list_middleware(
+        search=search if search else None,
+        category=category if category else None,
+    )
+    return {
+        "total": len(result),
+        "middleware": [m.to_dict() for m in result],
+    }
+
+
+@app.get("/api/middleware/summary")
+async def middleware_summary():
+    """中间件统计摘要"""
+    return mw.get_middleware_summary()
+
+
+@app.get("/api/middleware/{key}")
+async def get_middleware(key: str):
+    """获取单个中间件详情"""
+    info = mw.get_middleware(key)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"中间件 {key} 未找到")
+    return info.to_dict()
+
+
+@app.post("/api/middleware/{key}/start")
+async def start_middleware(key: str):
+    """启动中间件"""
+    result = mw.start_middleware(key)
+    return result.to_dict()
+
+
+@app.post("/api/middleware/{key}/stop")
+async def stop_middleware(key: str):
+    """停止中间件"""
+    result = mw.stop_middleware(key)
+    return result.to_dict()
+
+
+@app.post("/api/middleware/{key}/restart")
+async def restart_middleware(key: str):
+    """重启中间件"""
+    result = mw.restart_middleware(key)
     return result.to_dict()
 
 

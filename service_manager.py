@@ -178,6 +178,46 @@ SYSTEM_SERVICE_PATTERNS = [
     "dmesg", "emergency", "rescue", "rc-local",
     "pmlogger", "pmie", "pmcd", "pmproxy",
     "speech-dispatcher", "spice-vdagent",
+    # 安全模块
+    "apparmor", "auditd", "secureboot-db",
+    # 定时任务
+    "anacron", "atd",
+    # ACPI/电源
+    "acpid",
+    # 磁盘/LVM/RAID 补充
+    "blk-availability", "mdadm", "mdmonitor", "mdmon",
+    "lvm2-monitor", "lvm2-lvmpolld", "dmraid-activation",
+    # 网络补充
+    "networking", "nftables", "ifupdown", "ifup", "ifdown",
+    "networkd-dispatcher", "mptcpize",
+    # SSH guard（不是 ssh 本身）
+    "sshguard",
+    # 硬件监控
+    "hddtemp", "lm-sensors", "smartmontools", "smartd",
+    "sysfsutils", "loadcpufreq", "ondemand",
+    # 数据库/日志
+    "man-db", "logrotate", "sysstat",
+    # 加密/安全
+    "cryptdisks", "cryptdisks-",
+    # 虚拟化补充
+    "libvirtd", "virtlockd", "virtlogd", "virtnetworkd",
+    "virtnwfilterd", "virtsecretd", "virtstoraged",
+    "virtinterfaced", "virtnodedevd", "virtproxyd",
+    "virtqemud", "virtlxcd", "virtvboxd", "virtxend",
+    # Ubuntu 特有
+    "ubuntu-advantage", "ubuntu-fan", "casper-md5check",
+    "ureadahead", "ureadahead-",
+    # 打印机补充
+    "cups-browsed", "avahi-daemon",
+    # 其他系统
+    "finalrd", "hwclock", "hwclock-",
+    "kmod", "procps", "proc-sys-fs-binfmt_misc",
+    "quotaon", "rpcbind", "rsync", "saned",
+    "setvtrgb", "usbguard",
+    "x11-common",
+    # 网络文件系统/存储
+    "rpc-statd", "nfs-", "rpc-gssd", "rpc-svcgssd",
+    "nmbd", "smbd", "samba-ad-dc",
 ]
 
 USER_SERVICE_WHITELIST = [
