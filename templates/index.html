@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevTools — 服务管理</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
+        .app { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px; }
+        .header h1 { font-size: 22px; font-weight: 700; color: #16213e; }
+        .header-info { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #666; }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; background: #e8e8e8; color: #555; }
+        .badge-blue { background: #dbeafe; color: #1e40af; }
+        .badge-green { background: #d1fae5; color: #065f46; }
+        .badge-red { background: #fee2e2; color: #991b1b; }
+        .badge-yellow { background: #fef3c7; color: #92400e; }
+        .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+        #search-input { flex: 1; max-width: 400px; padding: 10px 16px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; transition: border-color 0.2s; background: #fff; }
+        #search-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+        .mode-select { padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; background: #fff; cursor: pointer; color: #374151; min-width: 110px; }
+        .mode-select:focus { border-color: #3b82f6; }
+        .btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.2s, opacity 0.2s; }
+        .btn:hover { opacity: 0.85; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: #3b82f6; color: #fff; }
+        .btn-sm { padding: 5px 12px; font-size: 12px; border-radius: 6px; }
+        .btn-success { background: #10b981; color: #fff; }
+        .btn-danger { background: #ef4444; color: #fff; }
+        .btn-warning { background: #f59e0b; color: #fff; }
+        .btn-outline { background: transparent; border: 1px solid #d1d5db; color: #374151; }
+        .btn-outline:hover { background: #f9fafb; }
+        .loading { font-size: 13px; color: #6b7280; }
+        .hidden { display: none !important; }
+        .warning { padding: 12px 16px; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; color: #92400e; font-size: 14px; margin-bottom: 16px; }
+        .toast { position: fixed; top: 20px; right: 20px; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 500; z-index: 1000; animation: slideIn 0.3s ease; max-width: 420px; }
+        .toast.success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+        .toast.error { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .table-container { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; }
+        thead { background: #f8fafc; border-bottom: 2px solid #e5e7eb; }
+        th { padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+        td { padding: 10px 16px; font-size: 14px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+        tr:hover td { background: #f9fafb; }
+        .col-status { width: 80px; }
+        .col-name { width: 180px; }
+        .col-sub { width: 110px; }
+        .col-boot { width: 90px; }
+        .col-pid { width: 70px; }
+        .col-actions { width: 200px; }
+        .service-name { font-weight: 600; color: #16213e; font-family: "SF Mono", "Fira Code", monospace; font-size: 13px; }
+        .service-desc { color: #6b7280; font-size: 13px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+        .status-dot.running { background: #10b981; }
+        .status-dot.dead { background: #9ca3af; }
+        .status-dot.failed { background: #ef4444; }
+        .status-dot.exited { background: #f59e0b; }
+        .status-dot.auto-restart { background: #f59e0b; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .actions-group { display: flex; gap: 6px; flex-wrap: wrap; }
+        .empty-state { text-align: center; padding: 40px !important; color: #9ca3af; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <h1>&#x2699; DevTools</h1>
+            <div class="header-info">
+                <span id="hostname">--</span>
+                <span id="platform-badge" class="badge">--</span>
+                <span id="service-count" class="badge badge-blue">0 个服务</span>
+            </div>
+        </header>
+
+        <div class="toolbar">
+            <input type="text" id="search-input" placeholder="搜索服务名..." autocomplete="off" />
+            <select id="mode-select" class="mode-select">
+                <option value="user" selected>用户服务</option>
+                <option value="all">全部服务</option>
+            </select>
+            <button id="refresh-btn" class="btn btn-primary">&#x21bb; 刷新</button>
+            <span id="loading-indicator" class="loading hidden">加载中...</span>
+        </div>
+
+        <div id="toast" class="toast hidden"></div>
+
+        <div id="platform-warning" class="warning hidden">
+            &#x26A0; 当前运行在非 Linux 系统上，服务管理功能不可用。部署到 Linux 服务器后即可使用。
+        </div>
+
+        <div class="table-container">
+            <table id="service-table">
+                <thead>
+                    <tr>
+                        <th class="col-status">状态</th>
+                        <th class="col-name">服务名</th>
+                        <th class="col-desc">描述</th>
+                        <th class="col-sub">子状态</th>
+                        <th class="col-boot">开机自启</th>
+                        <th class="col-pid">PID</th>
+                        <th class="col-actions">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="service-tbody">
+                    <tr><td colspan="7" class="empty-state">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+    // ---- 状态 ----
+    var allServices = [];
+    var currentSearch = '';
+    var currentMode = 'user';  // user | all
+
+    // ---- DOM 元素 ----
+    var $tbody = document.getElementById('service-tbody');
+    var $searchInput = document.getElementById('search-input');
+    var $modeSelect = document.getElementById('mode-select');
+    var $refreshBtn = document.getElementById('refresh-btn');
+    var $loading = document.getElementById('loading-indicator');
+    var $hostname = document.getElementById('hostname');
+    var $platformBadge = document.getElementById('platform-badge');
+    var $serviceCount = document.getElementById('service-count');
+    var $platformWarning = document.getElementById('platform-warning');
+    var $toast = document.getElementById('toast');
+
+    // ---- 初始化 ----
+    document.addEventListener('DOMContentLoaded', function() {
+        loadSystemInfo();
+        loadServices();
+
+        $refreshBtn.addEventListener('click', loadServices);
+
+        $modeSelect.addEventListener('change', function() {
+            currentMode = $modeSelect.value;
+            loadServices();
+        });
+
+        var debounceTimer;
+        $searchInput.addEventListener('input', function() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(function() {
+                currentSearch = $searchInput.value.trim();
+                render();
+            }, 300);
+        });
+    });
+
+    // ---- API ----
+    function loadSystemInfo() {
+        fetch('/api/system')
+            .then(function(r) { return r.json(); })
+            .then(function(info) {
+                $hostname.textContent = info.hostname || '--';
+                $platformBadge.textContent = info.platform + ' ' + (info.platform_release || '');
+                $platformBadge.className = info.is_linux ? 'badge badge-green' : 'badge badge-yellow';
+                if (!info.is_linux) {
+                    $platformWarning.classList.remove('hidden');
+                }
+            })
+            .catch(function(err) {
+                console.error('加载系统信息失败:', err);
+            });
+    }
+
+    function loadServices() {
+        $loading.classList.remove('hidden');
+        $refreshBtn.disabled = true;
+
+        fetch('/api/services?mode=' + currentMode)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                allServices = data.services || [];
+                if (!data.platform) {
+                    $platformWarning.classList.remove('hidden');
+                }
+                $serviceCount.textContent = data.total + ' 个服务';
+                render();
+            })
+            .catch(function(err) {
+                console.error('加载服务列表失败:', err);
+                showToast('加载服务列表失败: ' + err.message, 'error');
+                $tbody.innerHTML = '<tr><td colspan="7" class="empty-state">加载失败，请检查后端是否运行</td></tr>';
+            })
+            .finally(function() {
+                $loading.classList.add('hidden');
+                $refreshBtn.disabled = false;
+            });
+    }
+
+    function doAction(name, action) {
+        fetch('/api/services/' + encodeURIComponent(name) + '/' + action, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(result) {
+                if (result.success) {
+                    showToast(name + ': ' + result.message, 'success');
+                    setTimeout(loadServices, 800);
+                } else {
+                    showToast(name + ': ' + result.message, 'error');
+                }
+            })
+            .catch(function(err) {
+                showToast(action + ' ' + name + ' 失败: ' + err.message, 'error');
+            });
+    }
+
+    // ---- 渲染 ----
+    function render() {
+        var search = currentSearch.toLowerCase();
+        var filtered = search
+            ? allServices.filter(function(s) { return s.name.toLowerCase().indexOf(search) !== -1; })
+            : allServices;
+
+        if (filtered.length === 0) {
+            $tbody.innerHTML = '<tr><td colspan="7" class="empty-state">' +
+                (search ? '没有匹配的服务' : '未发现任何服务') + '</td></tr>';
+            return;
+        }
+        $tbody.innerHTML = filtered.map(renderRow).join('');
+    }
+
+    function renderRow(svc) {
+        var sub = svc.sub_state;
+        var label = statusLabels[sub] || sub;
+        var badge = statusBadge(svc.active_state, sub);
+        var bootBadge = svc.is_enabled
+            ? '<span class="badge badge-green">enabled</span>'
+            : (svc.unit_file_state ? '<span class="badge">' + esc(svc.unit_file_state) + '</span>' : '<span class="badge">--</span>');
+        var pidText = svc.pid ? svc.pid : '--';
+
+        return '<tr>' +
+            '<td>' + badge + '</td>' +
+            '<td><span class="service-name">' + esc(svc.name) + '</span></td>' +
+            '<td><span class="service-desc" title="' + escAttr(svc.description || '') + '">' + esc(svc.description || '--') + '</span></td>' +
+            '<td><span class="status-dot ' + sub + '"></span>' + label + '</td>' +
+            '<td>' + bootBadge + '</td>' +
+            '<td><code>' + pidText + '</code></td>' +
+            '<td><div class="actions-group">' + actionButtons(svc) + '</div></td>' +
+            '</tr>';
+    }
+
+    function actionButtons(svc) {
+        var name = escAttr(svc.name);
+        if (svc.sub_state === 'running') {
+            return '<button class="btn btn-sm btn-danger" onclick="doAction(\'' + name + '\',\'stop\')">&#x23F9; 停止</button>' +
+                '<button class="btn btn-sm btn-warning" onclick="doAction(\'' + name + '\',\'restart\')">&#x21BB; 重启</button>' +
+                (svc.is_enabled
+                    ? '<button class="btn btn-sm btn-outline" onclick="doAction(\'' + name + '\',\'disable\')">&#x1F513; 禁自启</button>'
+                    : '<button class="btn btn-sm btn-outline" onclick="doAction(\'' + name + '\',\'enable\')">&#x1F512; 开自启</button>');
+        } else {
+            return '<button class="btn btn-sm btn-success" onclick="doAction(\'' + name + '\',\'start\')">&#x25B6; 启动</button>' +
+                (svc.is_enabled
+                    ? '<button class="btn btn-sm btn-outline" onclick="doAction(\'' + name + '\',\'disable\')">&#x1F513; 禁自启</button>'
+                    : '<button class="btn btn-sm btn-outline" onclick="doAction(\'' + name + '\',\'enable\')">&#x1F512; 开自启</button>');
+        }
+    }
+
+    function statusBadge(active, sub) {
+        if (sub === 'running') return '<span class="badge badge-green">&#x25CF; 运行中</span>';
+        if (sub === 'failed' || active === 'failed') return '<span class="badge badge-red">&#x2716; 失败</span>';
+        if (sub === 'exited') return '<span class="badge badge-yellow">&#x2714; 已退出</span>';
+        if (sub === 'auto-restart') return '<span class="badge badge-yellow">&#x21BB; 重启中</span>';
+        if (active === 'inactive' || sub === 'dead') return '<span class="badge">&#x25CB; 已停止</span>';
+        return '<span class="badge">' + active + '</span>';
+    }
+
+    var statusLabels = {
+        running: '运行中', dead: '已停止', exited: '已退出',
+        failed: '失败', 'auto-restart': '自动重启中'
+    };
+
+    function showToast(message, type) {
+        $toast.textContent = message;
+        $toast.className = 'toast ' + type;
+        $toast.classList.remove('hidden');
+        clearTimeout($toast._timeout);
+        $toast._timeout = setTimeout(function() { $toast.classList.add('hidden'); }, 3000);
+    }
+
+    function esc(str) {
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function escAttr(str) {
+        return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    </script>
+</body>
+</html>
