@@ -812,11 +812,16 @@ def list_middleware(
         systemd_detected, process_detected, port_detected, filesystem_detected
     )
 
-    # 快速版本检测
+    # 快速版本检测 + 补充目录默认端口
     for key, info in merged.items():
         sig = _get_catalog(key)
-        if sig and not info.version:
-            info.version = _detect_version_fast(sig, info)
+        if sig:
+            if not info.version:
+                info.version = _detect_version_fast(sig, info)
+            # 即使中间件未运行，也填充目录定义的默认端口作为预期端口
+            if not info.ports and sig.default_ports:
+                info.ports = list(sig.default_ports)
+                info.port = sig.default_ports[0]
 
     result = list(merged.values())
 
